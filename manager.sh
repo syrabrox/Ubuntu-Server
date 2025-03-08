@@ -320,7 +320,7 @@ while true; do
     echo "7) List Available Backups"
     echo "8) Transfer Backups to External Server"
     echo "9) Copy all paths to server"
-    echo "10) UFW Maneger"
+    echo "10) UFW Manager"
     echo "0) Exit"
     read -p "Enter your choice (0-10): " choice
     case $choice in
