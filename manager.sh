@@ -51,9 +51,9 @@ install_zip_unzip() {
 }
 
 backup() {
-    mkdir -p ./backup
+    mkdir -p $backup_folder
     output_file="$backup_folder/backup_$current_date.zip"
-    json_file="./backup/backup_paths.json"
+    json_file="$backup_folder/backup_paths.json"
     echo "{" > "$json_file"
     echo '  "backup_folders": [' >> "$json_file"
     zip -r "$output_file" "${save[@]}"
