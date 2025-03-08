@@ -74,16 +74,24 @@ backup() {
 list_backups() {
     echo "Available backups:"
     local backups=($backup_folder/*.zip)
-    if [ ${#backups[@]} -eq 0 ]; then
+
+    # Falls keine Backups existieren
+    if [ ${#backups[@]} -eq 1 ] && [ ! -f "${backups[0]}" ]; then
         echo "No backups found."
+        echo "0) Exit"
+        read -p "Choose an option: " backup_choice
         return
     fi
+
+    # Falls Backups vorhanden sind, "all" ganz oben anzeigen
+    echo "all) Delete all backups"
+
     local i=1
     for backup in "${backups[@]}"; do
         echo "$i) $(basename "$backup")"
         i=$((i + 1))
     done
-    echo "all) Delete all backups"
+
     echo "0) Exit"
     read -p "Choose an option (e.g., 1,2,3 or all to delete all, 0 to exit): " backup_choice
 
@@ -93,8 +101,7 @@ list_backups() {
 
     if [ "$backup_choice" == "all" ]; then
         echo "You have selected to delete all backups."
-        echo "Are you sure you want to delete all backups? (y/n)"
-        read -p "Confirm: " confirm_delete
+        read -p "Are you sure you want to delete all backups? (y/n): " confirm_delete
         if [ "$confirm_delete" == "y" ]; then
             for backup in "${backups[@]}"; do
                 rm -f "$backup"
@@ -125,8 +132,7 @@ list_backups() {
             echo "$(basename "$selected_backup")"
         done
 
-        echo "Are you sure you want to delete these backups? (y/n)"
-        read -p "Confirm: " confirm_delete
+        read -p "Are you sure you want to delete these backups? (y/n): " confirm_delete
         if [ "$confirm_delete" == "y" ]; then
             for selected_backup in "${selected_backups[@]}"; do
                 rm -f "$selected_backup"
