@@ -7,9 +7,9 @@ save=(
 )
 current_date=$(date +"%d_%m_%Y_%H_%M")
 backup_folder="./backup"
-server_user=""
-server_ip=""
-server_path=""
+server_user="admin"
+server_ip="asa"
+server_path="/Users/admin/Documents/server_backup/"
 
 install_docker() {
     echo "Starting Docker installation..."
@@ -19,7 +19,6 @@ install_docker() {
         curl \
         gnupg-agent \
         software-properties-common
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
     curl -fsSL https://get.docker.com -o get-docker.sh
     sudo sh get-docker.sh
     sudo docker run hello-world
@@ -33,6 +32,7 @@ install_portainer() {
       -v /var/run/docker.sock:/var/run/docker.sock \
       -v portainer_data:/data \
       portainer/portainer-ce:latest
+    docker network create container_network
     echo "Portainer successfully installed."
 }
 
@@ -44,140 +44,42 @@ install_cockpit() {
     echo "Cockpit is accessible at: https://$(hostname -I | awk '{print $1}'):9090"
 }
 
-install_zip_unzip() {
-    echo "Installing zip and unzip..."
-    sudo apt update && sudo apt install -y zip unzip
-    echo "zip and unzip successfully installed."
+install_tar() {
+    echo "Installing tar..."
+    sudo apt update && sudo apt install -y tar
+    echo "tar successfully installed."
 }
 
 backup() {
-    mkdir -p $backup_folder
-    output_file="$backup_folder/backup_$current_date.zip"
-    json_file="$backup_folder/backup_paths.json"
-    echo "{" > "$json_file"
-    echo '  "backup_folders": [' >> "$json_file"
-    zip -r "$output_file" "${save[@]}"
-    for i in "${!save[@]}"; do
-        if [ $i -eq $((${#save[@]} - 1)) ]; then
-            echo "    \"${save[$i]}\"" >> "$json_file"
-        else
-            echo "    \"${save[$i]}\"," >> "$json_file"
-        fi
-    done
-    echo '  ]' >> "$json_file"
-    echo "}" >> "$json_file"
-    zip -r "$output_file" "$json_file"
-    rm -f "$json_file"
+    mkdir -p "$backup_folder"
+    output_file="$backup_folder/backup_$current_date.tar.gz"
+    sudo tar -czpf "$output_file" --absolute-names "${save[@]}"
     echo "Backup completed: $output_file"
 }
 
-list_backups() {
-    echo "Available backups:"
-    local backups=($backup_folder/*.zip)
-
-    # Falls keine Backups existieren
-    if [ ${#backups[@]} -eq 1 ] && [ ! -f "${backups[0]}" ]; then
-        echo "No backups found."
-        echo "0) Exit"
-        read -p "Choose an option: " backup_choice
-        return
-    fi
-
-    # Falls Backups vorhanden sind, "all" ganz oben anzeigen
-    echo "all) Delete all backups"
-
+restore() {
+    echo "Available backup files:"
+    local backups=($backup_folder/*.tar.gz)
     local i=1
     for backup in "${backups[@]}"; do
         echo "$i) $(basename "$backup")"
         i=$((i + 1))
     done
-
     echo "0) Exit"
-    read -p "Choose an option (e.g., 1,2,3 or all to delete all, 0 to exit): " backup_choice
-
-    if [ "$backup_choice" == "0" ]; then
+    
+    read -p "Choose a backup file to restore (enter the number, or 0 to exit): " choice
+    if [ "$choice" == "0" ]; then
         return
     fi
-
-    if [ "$backup_choice" == "all" ]; then
-        echo "You have selected to delete all backups."
-        read -p "Are you sure you want to delete all backups? (y/n): " confirm_delete
-        if [ "$confirm_delete" == "y" ]; then
-            for backup in "${backups[@]}"; do
-                rm -f "$backup"
-                echo "Backup $(basename "$backup") deleted."
-            done
-        else
-            echo "Backup deletion cancelled."
-        fi
-        return
-    fi
-
-    IFS=',' read -ra choices <<< "$backup_choice"
-    local valid_selection=true
-    local selected_backups=()
-
-    for choice in "${choices[@]}"; do
-        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -gt 0 ] && [ "$choice" -le "${#backups[@]}" ]; then
-            selected_backups+=("${backups[$((choice - 1))]}")
-        else
-            echo "Invalid number: $choice"
-            valid_selection=false
-        fi
-    done
-
-    if [ "$valid_selection" == true ]; then
-        echo "The following backups will be deleted:"
-        for selected_backup in "${selected_backups[@]}"; do
-            echo "$(basename "$selected_backup")"
-        done
-
-        read -p "Are you sure you want to delete these backups? (y/n): " confirm_delete
-        if [ "$confirm_delete" == "y" ]; then
-            for selected_backup in "${selected_backups[@]}"; do
-                rm -f "$selected_backup"
-                echo "Backup $(basename "$selected_backup") deleted."
-            done
-        else
-            echo "Backup deletion cancelled."
-        fi
-    fi
-}
-
-restore() {
-    while true; do
-        list_backups
-        read -p "Choose a backup number (0 to exit): " choice
-        if [ "$choice" == "0" ]; then
-            break
-        fi
-        local backups=($backup_folder/*.zip)
-        if [ "$choice" -lt 1 ] || [ "$choice" -gt ${#backups[@]} ]; then
-            echo "Invalid choice!"
-            continue
-        fi
+    
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -gt 0 ] && [ "$choice" -le "${#backups[@]}" ]; then
         backup_path="${backups[$((choice - 1))]}"
-        restore_base="./restore_temp"
-        echo "Extracting backup..."
-        mkdir -p "$restore_base"
-        unzip -o "$backup_path" -d "$restore_base"
-        json_file="$restore_base/backup_paths.json"
-        if [ ! -f "$json_file" ]; then
-            echo "Error: JSON file '$json_file' is missing!"
-            continue
-        fi
-        backup_folders=$(jq -r '.backup_folders[]' "$json_file")
-        for dir in $backup_folders; do
-            target_path="$restore_base$dir"
-            if [ -d "$target_path" ]; then
-                echo "Copying $target_path to $dir..."
-                sudo mkdir -p "$dir"
-                sudo cp -r "$target_path"/* "$dir"
-            fi
-        done
-        rm -rf "$restore_base"
+        echo "Restoring backup from: $backup_path"
+        sudo tar -xzpf "$backup_path" -C /
         echo "Restore completed."
-    done
+    else
+        echo "Invalid choice, please try again."
+    fi
 }
 
 transfer_backups() {
@@ -192,7 +94,7 @@ transfer_backups() {
     fi
 
     echo "Available backups:"
-    local backups=($backup_folder/*.zip)
+    local backups=($backup_folder/*.tar.gz)
     local i=1
     for backup in "${backups[@]}"; do
         echo "$i) $(basename "$backup")"
@@ -320,27 +222,25 @@ while true; do
     echo "1) Install Docker"
     echo "2) Install Portainer"
     echo "3) Install Cockpit"
-    echo "4) Install zip/unzip"
+    echo "4) Install Tar"
     echo "5) Create Backup"
     echo "6) Perform Restore"
-    echo "7) List Available Backups"
-    echo "8) Transfer Backups to External Server"
-    echo "9) Copy all paths to server"
-    echo "10) UFW Manager"
+    echo "7) Transfer Backups to External Server"
+    echo "8) Copy all paths to server"
+    echo "9) UFW Manager"
     echo "0) Exit"
-    read -p "Enter your choice (0-10): " choice
+    read -p "Enter your choice (0-9): " choice
     case $choice in
         1) install_docker ;;
         2) install_portainer ;;
         3) install_cockpit ;;
-        4) install_zip_unzip ;;
+        4) install_tar ;;
         5) backup ;;
         6) restore ;;
-        7) list_backups ;;
-        8) transfer_backups ;;
-        9) copy_paths_to_server ;;
-        10) ufw_manager ;;
+        7) transfer_backups ;;
+        8) copy_paths_to_server ;;
+        9) ufw_manager ;;
         0) echo "Exiting script."; exit 0 ;;
-        *) echo "Invalid choice. Please choose a number between 0 and 10." ;;
+        *) echo "Invalid choice. Please choose a number between 0 and 9." ;;
     esac
 done
