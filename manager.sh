@@ -217,61 +217,6 @@ ufw_manager() {
     esac
 }
 
-get_backups_from_server() {
-    if [ -z "$server_ip" ]; then
-        read -p "Enter the server IP: " server_ip
-    fi
-    if [ -z "$server_user" ]; then
-        read -p "Enter the username: " server_user
-    fi
-    if [ -z "$server_path" ]; then
-        read -p "Enter the path on the server where backups are stored: " server_path
-    fi
-
-    server_os=$(ssh "$server_user@$server_ip" "uname -s" 2>/dev/null)
-
-    if [[ "$server_os" == "Linux" ]]; then
-        echo "Fetching available backup files from Linux server..."
-        ssh "$server_user@$server_ip" "ls -1 $server_path/*.tar.gz" > available_backups.txt
-    else
-        echo "Fetching available backup files from Windows server..."
-        ssh "$server_user@$server_ip" "dir \"$server_path\"\\*.tar.gz /b" > available_backups.txt
-    fi
-
-    if [ ! -s available_backups.txt ]; then
-        echo "No backup files found on the server."
-        rm -f available_backups.txt  
-        return
-    fi
-
-    echo "Available backup files on the server:"
-    i=1
-    while read -r backup; do
-        echo "$i) $(basename "$backup")"
-        i=$((i + 1))
-    done < available_backups.txt
-    echo "0) Exit"
-
-    read -p "Choose a backup file to download (enter the number, or 0 to exit): " choice
-    if [ "$choice" == "0" ]; then
-        rm -f available_backups.txt  
-        return
-    fi
-
-    selected_backup=$(sed -n "${choice}p" < available_backups.txt)
-    if [ -z "$selected_backup" ]; then
-        echo "Invalid choice. Please try again."
-        rm -f available_backups.txt 
-        return
-    fi
-
-    echo "Downloading backup from: $selected_backup"
-    scp "$server_user@$server_ip:\"$server_path\\$selected_backup\"" "$backup_folder/"
-    echo "Backup downloaded to $backup_folder."
-
-    rm -f available_backups.txt
-}
-
 while true; do
     echo "Select an option:"
     echo "1) Install Docker"
@@ -283,9 +228,8 @@ while true; do
     echo "7) Upload Backups"
     echo "8) Copy all paths to server"
     echo "9) UFW Manager"
-    echo "10) Download Backups"
     echo "0) Exit"
-    read -p "Enter your choice (0-10): " choice
+    read -p "Enter your choice (0-9): " choice
     case $choice in
         1) install_docker ;;
         2) install_portainer ;;
@@ -296,8 +240,7 @@ while true; do
         7) transfer_backups ;;
         8) copy_paths_to_server ;;
         9) ufw_manager ;;
-        10) get_backups_from_server ;;
         0) echo "Exiting script."; exit 0 ;;
-        *) echo "Invalid choice. Please choose a number between 0 and 10" ;;
+        *) echo "Invalid choice. Please choose a number between 0 and 9" ;;
     esac
 done
